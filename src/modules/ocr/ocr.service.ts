@@ -36,7 +36,17 @@ export class OcrService {
     if (!targetUser) {
       targetUser = await this.prisma.user.findFirst();
     }
-    const validUserId = targetUser?.id || userId;
+    if (!targetUser) {
+      targetUser = await this.prisma.user.create({
+        data: {
+          id: userId,
+          email: 'system.user@example.com',
+          passwordHash: '$2b$10$Ep5mg96hA552z8xW0J2v1.aG2.hA0S.s6X93Zk.p9J1v.',
+          fullName: 'System User',
+        },
+      });
+    }
+    const validUserId = targetUser.id;
 
     const ktpData = extraction.ktpData || {};
     const record = await this.prisma.ktpExtraction.create({
