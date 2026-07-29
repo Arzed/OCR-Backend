@@ -31,27 +31,11 @@ export class OcrService {
     else if (extraction.detectedCardType === 'CREDIT_CARD') mappedCardType = CardType.CREDIT_CARD;
     else if (extraction.detectedCardType === 'PASSPORT') mappedCardType = CardType.PASSPORT;
 
-    // 3. Ensure user exists in database to prevent P2003 Foreign Key constraint failure
-    let targetUser = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!targetUser) {
-      targetUser = await this.prisma.user.findFirst();
-    }
-    if (!targetUser) {
-      targetUser = await this.prisma.user.create({
-        data: {
-          id: userId,
-          email: 'system.user@example.com',
-          passwordHash: '$2b$10$Ep5mg96hA552z8xW0J2v1.aG2.hA0S.s6X93Zk.p9J1v.',
-          fullName: 'System User',
-        },
-      });
-    }
-    const validUserId = targetUser.id;
-
+    // 3. Save extraction result log into PostgreSQL Database via Prisma
     const ktpData = extraction.ktpData || {};
     const record = await this.prisma.ktpExtraction.create({
       data: {
-        userId: validUserId,
+        userId,
         s3Key: dto.s3Key,
         isValidKtp: extraction.isValidKtp,
         detectedCardType: mappedCardType,
