@@ -44,7 +44,14 @@ You are an expert AI document verification and OCR system specializing in Indone
 Your task:
 1. Verify if the provided image is a valid Indonesian E-KTP (Electronic KTP).
 2. Determine if the card is NOT an E-KTP (e.g. Driver's License / SIM, Credit Card, Passport, NPWP, Student ID, or arbitrary document).
-3. If it IS an E-KTP, extract all visible text fields with maximum precision into JSON format.
+3. If it IS an E-KTP, extract all visible text fields with extreme precision into JSON format.
+
+CRITICAL INSTRUCTIONS FOR MAXIMUM ACCURACY:
+- NIK: Must be EXACTLY 16 digits. Pay extreme attention to distinguishing numbers from letters (e.g. '0' vs 'O'/'D', '1' vs 'I'/'l', '8' vs 'B', '5' vs 'S', '3' vs 'E').
+- NIK Date-of-Birth Cross Check: In Indonesian NIK, digits 7-8 represent Day, 9-10 represent Month, and 11-12 represent Year of birth. For females, 40 is added to the Day (e.g., day 55 means female born on 15th). Use this rule to verify and rectify any ambiguous NIK digits against "tanggalLahir".
+- Text Standardization: Clean up minor noise characters, normalize all text to uppercase (e.g. "ISLAM", "KAWIN", "WNI").
+- RT/RW & Kel/Desa: Extract exact codes without dropping trailing/leading numbers.
+- If a field is blurred, damaged, or unreadable, set its value to null rather than guessing incorrect characters.
 
 Return ONLY valid JSON matching this schema:
 {
@@ -85,21 +92,48 @@ Return ONLY valid JSON matching this schema:
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Validate if this image is an E-KTP and extract its fields.' },
-              { type: 'image_url', image_url: { url: imagePayloadUrl } },
+              { type: 'text', text: 'Validate if this image is an E-KTP and extract all fields with maximum precision.' },
+              { 
+                type: 'image_url', 
+                image_url: { 
+                  url: imagePayloadUrl,
+                  detail: 'high'
+                } 
+              },
             ],
           },
         ],
-        temperature: 0.1,
+        temperature: 0.0,
       });
 
       const rawJsonStr = response.choices[0]?.message?.content || '{}';
       const parsedData = JSON.parse(rawJsonStr) as EKtpExtractionResponse;
       parsedData.tokensUsed = response.usage?.total_tokens || 0;
 
+      // Post-processing NIK Sanitizer to fix common OCR character confusions
+      if (parsedData.ktpData?.nik) {
+        parsedData.ktpData.nik = this.sanitizeNik(parsedData.ktpData.nik);
+      }
+
       return parsedData;
     } catch (error) {
       throw new InternalServerErrorException(`OpenAI Vision extraction failed: ${error.message}`);
     }
+  }
+
+  private sanitizeNik(nik: string): string {
+    const cleaned = nik
+      .replace(/[O|o|D]/g, '0')
+      .replace(/[I|l|L|i]/g, '1')
+      .replace(/[Z|z]/g, '2')
+      .replace(/[E|e]/g, '3')
+      .replace(/[A|a]/g, '4')
+      .replace(/[S|s]/g, '5')
+      .replace(/[G|g]/g, '6')
+      .replace(/[T|t]/g, '7')
+      .replace(/[B]/g, '8')
+      .replace(/\D/g, ''); // Keep only numeric digits
+
+    return cleaned.length === 16 ? cleaned : nik;
   }
 }
