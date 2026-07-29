@@ -1,0 +1,71 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum CardType {
+  E_KTP
+  SIM
+  CREDIT_CARD
+  PASSPORT
+  UNKNOWN
+}
+
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  passwordHash  String
+  fullName      String?
+  role          Role            @default(USER)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  extractions   KtpExtraction[]
+
+  @@map("users")
+}
+
+model KtpExtraction {
+  id                 String     @id @default(uuid())
+  userId             String
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  s3Key              String
+  isValidKtp         Boolean    @default(false)
+  detectedCardType   CardType   @default(UNKNOWN)
+  validationMessage  String?
+  confidenceScore    Float?
+  
+  // Extracted E-KTP Form Fields
+  nik                String?
+  nama               String?
+  tempatLahir        String?
+  tanggalLahir       String?
+  jenisKelamin       String?
+  golonganDarah      String?
+  alamat             String?
+  rtRw               String?
+  kelDesa            String?
+  kecamatan          String?
+  agama              String?
+  statusPerkawinan   String?
+  pekerjaan          String?
+  kewarganegaraan    String?
+  berlakuHingga      String?
+
+  rawResponseJson    Json?
+  tokensUsed         Int        @default(0)
+  createdAt          DateTime   @default(now())
+
+  @@index([userId])
+  @@index([isValidKtp])
+  @@map("ktp_extractions")
+}
