@@ -17,9 +17,9 @@ export class OcrService {
     return this.storageService.generateUploadPresignedUrl(dto.fileName, dto.mimeType);
   }
 
-  async extractAndValidateKtp(userId: string, dto: ExtractKtpDto) {
+  async extractAndValidateKtp(userId: string | null, dto: ExtractKtpDto) {
     // 1. Get temporary accessible download URL for OpenAI Vision API
-    const imageUrl = dto.directImageUrl || (await this.storageService.generateDownloadPresignedUrl(dto.s3Key));
+    const imageUrl = dto.directImageUrl || (dto.s3Key ? await this.storageService.generateDownloadPresignedUrl(dto.s3Key) : '');
 
     // 2. Perform AI extraction and E-KTP card type verification
     const extraction: EKtpExtractionResponse = await this.openAiService.extractAndValidateKtp(imageUrl);
@@ -31,58 +31,65 @@ export class OcrService {
     else if (extraction.detectedCardType === 'CREDIT_CARD') mappedCardType = CardType.CREDIT_CARD;
     else if (extraction.detectedCardType === 'PASSPORT') mappedCardType = CardType.PASSPORT;
 
-    // 3. Save extraction result log into PostgreSQL Database via Prisma
+    // 3. Save extraction result log into PostgreSQL Database if userId is provided
     const ktpData = extraction.ktpData || {};
-    const record = await this.prisma.ktpExtraction.create({
-      data: {
-        userId,
-        s3Key: dto.s3Key,
-        isValidKtp: extraction.isValidKtp,
-        detectedCardType: mappedCardType,
-        validationMessage: extraction.validationMessage,
-        confidenceScore: extraction.confidenceScore,
-        nik: ktpData.nik || null,
-        nama: ktpData.nama || null,
-        tempatLahir: ktpData.tempatLahir || null,
-        tanggalLahir: ktpData.tanggalLahir || null,
-        jenisKelamin: ktpData.jenisKelamin || null,
-        golonganDarah: ktpData.golonganDarah || null,
-        alamat: ktpData.alamat || null,
-        rtRw: ktpData.rtRw || null,
-        kelDesa: ktpData.kelDesa || null,
-        kecamatan: ktpData.kecamatan || null,
-        agama: ktpData.agama || null,
-        statusPerkawinan: ktpData.statusPerkawinan || null,
-        pekerjaan: ktpData.pekerjaan || null,
-        kewarganegaraan: ktpData.kewarganegaraan || null,
-        berlakuHingga: ktpData.berlakuHingga || null,
-        rawResponseJson: extraction as any,
-        tokensUsed: extraction.tokensUsed || 0,
-      },
-    });
+    let recordId = 'temp-' + Date.now();
+    if (userId) {
+      const record = await this.prisma.ktpExtraction.create({
+        data: {
+          userId,
+          s3Key: dto.s3Key || 'direct-upload',
+          isValidKtp: extraction.isValidKtp,
+          detectedCardType: mappedCardType,
+          validationMessage: extraction.validationMessage,
+          confidenceScore: extraction.confidenceScore,
+          nik: ktpData.nik || null,
+          nama: ktpData.nama || null,
+          tempatLahir: ktpData.tempatLahir || null,
+          tanggalLahir: ktpData.tanggalLahir || null,
+          jenisKelamin: ktpData.jenisKelamin || null,
+          golonganDarah: ktpData.golonganDarah || null,
+          alamat: ktpData.alamat || null,
+          rtRw: ktpData.rtRw || null,
+          kelDesa: ktpData.kelDesa || null,
+          kecamatan: ktpData.kecamatan || null,
+          agama: ktpData.agama || null,
+          statusPerkawinan: ktpData.statusPerkawinan || null,
+          pekerjaan: ktpData.pekerjaan || null,
+          kewarganegaraan: ktpData.kewarganegaraan || null,
+          berlakuHingga: ktpData.berlakuHingga || null,
+          rawResponseJson: extraction as any,
+          tokensUsed: extraction.tokensUsed || 0,
+        },
+      });
+      recordId = record.id;
+    }
+
+    const tempatLahir = ktpData.tempatLahir || '';
+    const tanggalLahir = ktpData.tanggalLahir || '';
+    const tempatTanggalLahir = [tempatLahir, tanggalLahir].filter(Boolean).join(', ');
 
     return {
-      id: record.id,
-      isValidKtp: record.isValidKtp,
-      detectedCardType: record.detectedCardType,
-      validationMessage: record.validationMessage,
-      confidenceScore: record.confidenceScore,
+      id: recordId,
+      isValidKtp: extraction.isValidKtp,
+      detectedCardType: extraction.detectedCardType,
+      validationMessage: extraction.validationMessage,
+      confidenceScore: extraction.confidenceScore,
+      nik: ktpData.nik || '',
+      nama: ktpData.nama || '',
+      namaLengkap: ktpData.nama || '',
+      tempatLahir: tempatLahir,
+      tanggalLahir: tanggalLahir,
+      tempatTanggalLahir: tempatTanggalLahir,
+      jenisKelamin: ktpData.jenisKelamin || '',
       ktpData: {
-        nik: record.nik,
-        nama: record.nama,
-        tempatLahir: record.tempatLahir,
-        tanggalLahir: record.tanggalLahir,
-        jenisKelamin: record.jenisKelamin,
-        golonganDarah: record.golonganDarah,
-        alamat: record.alamat,
-        rtRw: record.rtRw,
-        kelDesa: record.kelDesa,
-        kecamatan: record.kecamatan,
-        agama: record.agama,
-        statusPerkawinan: record.statusPerkawinan,
-        pekerjaan: record.pekerjaan,
-        kewarganegaraan: record.kewarganegaraan,
-        berlakuHingga: record.berlakuHingga,
+        nik: ktpData.nik || '',
+        nama: ktpData.nama || '',
+        namaLengkap: ktpData.nama || '',
+        tempatLahir: tempatLahir,
+        tanggalLahir: tanggalLahir,
+        tempatTanggalLahir: tempatTanggalLahir,
+        jenisKelamin: ktpData.jenisKelamin || '',
       },
     };
   }
