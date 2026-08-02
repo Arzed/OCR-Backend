@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
 
 export class RequestPresignedUrlDto {
   @IsString()
@@ -18,4 +18,32 @@ export class ExtractKtpDto {
   @IsString()
   @IsOptional()
   directImageUrl?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  detectScreen?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  detectManipulation?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  validateExpiry?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isLiveCapture?: boolean;
+
+  @IsString()
+  @IsOptional()
+  sourceType?: string;
+
+  @IsString()
+  @IsOptional()
+  captureTimestamp?: string;
+
+  @IsString()
+  @IsOptional()
+  appSignature?: string;
 }

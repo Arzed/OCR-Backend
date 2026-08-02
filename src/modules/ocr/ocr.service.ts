@@ -77,13 +77,22 @@ export class OcrService {
     const isTampered = extraction.isTampered ?? ktpData.isTampered ?? false;
     const isExpired = extraction.isExpired ?? ktpData.isExpired ?? false;
 
+    // 4. Live Capture vs Postman / File Upload Security Check
+    const isLiveCapture = dto.isLiveCapture === true && dto.sourceType === 'LIVE_CAMERA_CAPTURE';
+    const finalIsValidKtp = extraction.isValidKtp && isLiveCapture;
+    const finalValidationMessage = !isLiveCapture
+      ? 'Pengunggahan ditolak: Foto e-KTP wajib diambil secara langsung (live camera capture) dari aplikasi mobile Daro Lab, bukan dikirim melalui Postman atau galeri file.'
+      : extraction.validationMessage;
+
     return {
       id: recordId,
-      isValidKtp: extraction.isValidKtp,
+      isValidKtp: finalIsValidKtp,
+      isLiveCapture,
+      isUnauthorizedUpload: !isLiveCapture,
       detectedCardType: extraction.detectedCardType,
       documentType: docType,
       cardType: docType,
-      validationMessage: extraction.validationMessage,
+      validationMessage: finalValidationMessage,
       confidenceScore: extraction.confidenceScore,
       isDigitalScreen,
       isPhotoOfPhoto,
@@ -116,6 +125,7 @@ export class OcrService {
         isEdited,
         isTampered,
         isExpired,
+        isLiveCapture,
       },
     };
   }
