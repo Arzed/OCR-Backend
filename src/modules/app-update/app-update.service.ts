@@ -13,8 +13,8 @@ export class AppUpdateService {
   }
 
   getLatestVersionInfo(currentVersion?: string) {
-    const latestVersion = '2.5.0';
-    const latestVersionCode = 25;
+    const latestVersion = '1.0.1';
+    const latestVersionCode = 2;
     const downloadUrl = this.getApkDownloadUrl();
 
     // Check if client version is older than latestVersion
@@ -25,7 +25,7 @@ export class AppUpdateService {
       data: {
         latestVersion,
         latestVersionCode,
-        currentVersion: currentVersion || '2.4.1',
+        currentVersion: currentVersion || '1.0.1',
         hasUpdate: isClientOutdated,
         downloadUrl,
         directDownloadUrl: '/api/v1/app/download-apk',
