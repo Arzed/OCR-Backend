@@ -5,12 +5,14 @@ import OpenAI from 'openai';
 export interface EKtpExtractionResponse {
   isValidKtp: boolean;
   detectedCardType: 'E_KTP' | 'SIM' | 'NPWP' | 'CREDIT_CARD' | 'PASSPORT' | 'UNKNOWN';
+  documentType?: string;
   validationMessage: string;
+  confidenceScore: number;
   isDigitalScreen?: boolean;
   isPhotoOfPhoto?: boolean;
   isEdited?: boolean;
-  fraudType?: 'DIGITAL_SCREEN' | 'PHOTO_OF_PHOTO' | 'EDITED' | 'INVALID_CARD' | 'NONE';
-  confidenceScore: number;
+  isTampered?: boolean;
+  isExpired?: boolean;
   ktpData?: {
     nik?: string;
     nama?: string;
@@ -27,6 +29,13 @@ export interface EKtpExtractionResponse {
     pekerjaan?: string;
     kewarganegaraan?: string;
     berlakuHingga?: string;
+    masaBerlaku?: string;
+    documentType?: string;
+    isDigitalScreen?: boolean;
+    isPhotoOfPhoto?: boolean;
+    isEdited?: boolean;
+    isTampered?: boolean;
+    isExpired?: boolean;
   };
   tokensUsed?: number;
 }
@@ -43,34 +52,33 @@ export class OpenAiService {
 
   async extractAndValidateKtp(imageUrl: string): Promise<EKtpExtractionResponse> {
     const systemPrompt = `
-You are an expert AI document verification, anti-spoofing fraud detection, and OCR system specializing in Indonesian Identity Cards (E-KTP).
+You are an expert AI document verification, liveness/anti-spoofing detection, and OCR system specializing in Indonesian Identity Cards (E-KTP).
 
 Your task:
-1. Verify if the provided image is an authentic, physical Indonesian E-KTP (Electronic KTP).
-2. Detect if the document is NOT an E-KTP (e.g. SIM / Driver's License, NPWP, Credit Card, Passport, or arbitrary document).
-3. Anti-Spoofing & Fraud Detection:
-   - Check if the photo was captured from a DIGITAL SCREEN (monitor, laptop, or smartphone screen showing moiré patterns, bezel edges, or pixel grid). Set "isDigitalScreen": true if detected.
-   - Check if the photo is a PHOTO-OF-PHOTO / photocopy printout. Set "isPhotoOfPhoto": true if detected.
-   - Check if the card shows signs of DIGITAL EDITING / manipulation. Set "isEdited": true if detected.
-4. If it IS an authentic E-KTP, extract all visible text fields with extreme precision into JSON format.
+1. Document Identification: Determine if the card in the image is an Indonesian E-KTP, SIM (Surat Izin Mengemudi / Driver's License), NPWP (Tax ID), Passport, Credit Card, or UNKNOWN.
+2. Anti-Spoofing & Authenticity Checks:
+   - "isDigitalScreen": Detect if the photo was taken off a digital screen (laptop, monitor, phone screen showing pixel grid moire or screen glare).
+   - "isPhotoOfPhoto": Detect if the photo is a re-photo of a printed paper photo or photocopy.
+   - "isEdited": Detect if the text or photo has digital manipulation or photoshop edits.
+   - "isExpired": Check if "berlakuHingga" / "masaBerlaku" explicitly indicates EXPIRED / TIDAK BERLAKU status. Note: e-KTPs with "SEUMUR HIDUP" or issued after 2011 are valid for life unless explicitly marked EXPIRED.
+3. If it IS a valid physical E-KTP, extract all fields with 100% accuracy.
 
-CRITICAL INSTRUCTIONS FOR MAXIMUM ACCURACY:
-- NIK: Must be EXACTLY 16 digits. Pay extreme attention to distinguishing numbers from letters (e.g. '0' vs 'O'/'D', '1' vs 'I'/'l', '8' vs 'B', '5' vs 'S', '3' vs 'E').
-- NIK Date-of-Birth Cross Check: In Indonesian NIK, digits 7-8 represent Day, 9-10 represent Month, and 11-12 represent Year of birth. For females, 40 is added to the Day (e.g., day 55 means female born on 15th). Use this rule to verify and rectify any ambiguous NIK digits against "tanggalLahir".
-- Text Standardization: Clean up minor noise characters, normalize all text to uppercase (e.g. "ISLAM", "KAWIN", "WNI").
-- RT/RW & Kel/Desa: Extract exact codes without dropping trailing/leading numbers.
-- If a field is blurred, damaged, or unreadable, set its value to null rather than guessing incorrect characters.
+Rules for "isValidKtp":
+- Must be true ONLY IF "detectedCardType" is "E_KTP", NIK is 16 digits, "isDigitalScreen" is false, "isPhotoOfPhoto" is false, "isEdited" is false, and "isExpired" is false.
+- Otherwise, "isValidKtp" MUST be false.
 
 Return ONLY valid JSON matching this schema:
 {
   "isValidKtp": boolean,
   "detectedCardType": "E_KTP" | "SIM" | "NPWP" | "CREDIT_CARD" | "PASSPORT" | "UNKNOWN",
+  "documentType": string,
+  "validationMessage": string (Clear explanation in Indonesian),
+  "confidenceScore": number (0.0 to 1.0),
   "isDigitalScreen": boolean,
   "isPhotoOfPhoto": boolean,
   "isEdited": boolean,
-  "fraudType": "DIGITAL_SCREEN" | "PHOTO_OF_PHOTO" | "EDITED" | "INVALID_CARD" | "NONE",
-  "validationMessage": "Clear explanation in Indonesian",
-  "confidenceScore": number (0.0 to 1.0),
+  "isTampered": boolean,
+  "isExpired": boolean,
   "ktpData": {
     "nik": string (16 digits or null),
     "nama": string or null,
@@ -86,7 +94,14 @@ Return ONLY valid JSON matching this schema:
     "statusPerkawinan": string or null,
     "pekerjaan": string or null,
     "kewarganegaraan": string or null,
-    "berlakuHingga": string or null
+    "berlakuHingga": string or null,
+    "masaBerlaku": string or null,
+    "documentType": string,
+    "isDigitalScreen": boolean,
+    "isPhotoOfPhoto": boolean,
+    "isEdited": boolean,
+    "isTampered": boolean,
+    "isExpired": boolean
   }
 }
 `;
@@ -104,7 +119,7 @@ Return ONLY valid JSON matching this schema:
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Validate if this image is an E-KTP and extract all fields with maximum precision.' },
+              { type: 'text', text: 'Validate if this image is an authentic physical E-KTP, perform anti-spoofing checks (digital screen/photo of photo/editing), and extract all fields with maximum precision.' },
               { 
                 type: 'image_url', 
                 image_url: { 

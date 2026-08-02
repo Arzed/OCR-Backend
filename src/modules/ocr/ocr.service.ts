@@ -21,7 +21,7 @@ export class OcrService {
     // 1. Get temporary accessible download URL for OpenAI Vision API
     const imageUrl = dto.directImageUrl || (dto.s3Key ? await this.storageService.generateDownloadPresignedUrl(dto.s3Key) : '');
 
-    // 2. Perform AI extraction and E-KTP card type verification
+    // 2. Perform AI extraction, card type verification, and anti-spoofing checks
     const extraction: EKtpExtractionResponse = await this.openAiService.extractAndValidateKtp(imageUrl);
 
     // Map string card type to Prisma Enum
@@ -57,7 +57,7 @@ export class OcrService {
           statusPerkawinan: ktpData.statusPerkawinan || null,
           pekerjaan: ktpData.pekerjaan || null,
           kewarganegaraan: ktpData.kewarganegaraan || null,
-          berlakuHingga: ktpData.berlakuHingga || null,
+          berlakuHingga: ktpData.berlakuHingga || ktpData.masaBerlaku || null,
           rawResponseJson: extraction as any,
           tokensUsed: extraction.tokensUsed || 0,
         },
@@ -68,21 +68,28 @@ export class OcrService {
     const tempatLahir = ktpData.tempatLahir || '';
     const tanggalLahir = ktpData.tanggalLahir || '';
     const tempatTanggalLahir = [tempatLahir, tanggalLahir].filter(Boolean).join(', ');
-    const isDigitalScreen = extraction.isDigitalScreen || false;
-    const isPhotoOfPhoto = extraction.isPhotoOfPhoto || false;
-    const isEdited = extraction.isEdited || false;
-    const fraudType = extraction.fraudType || (isDigitalScreen ? 'DIGITAL_SCREEN' : isEdited ? 'EDITED' : isPhotoOfPhoto ? 'PHOTO_OF_PHOTO' : 'NONE');
+    const docType = extraction.detectedCardType || extraction.documentType || (extraction.isValidKtp ? 'E_KTP' : 'UNKNOWN');
+    const masaBerlaku = ktpData.masaBerlaku || ktpData.berlakuHingga || 'SEUMUR HIDUP';
+
+    const isDigitalScreen = extraction.isDigitalScreen ?? ktpData.isDigitalScreen ?? false;
+    const isPhotoOfPhoto = extraction.isPhotoOfPhoto ?? ktpData.isPhotoOfPhoto ?? false;
+    const isEdited = extraction.isEdited ?? ktpData.isEdited ?? false;
+    const isTampered = extraction.isTampered ?? ktpData.isTampered ?? false;
+    const isExpired = extraction.isExpired ?? ktpData.isExpired ?? false;
 
     return {
       id: recordId,
-      isValidKtp: extraction.isValidKtp && !isDigitalScreen && !isPhotoOfPhoto && !isEdited,
+      isValidKtp: extraction.isValidKtp,
       detectedCardType: extraction.detectedCardType,
+      documentType: docType,
+      cardType: docType,
       validationMessage: extraction.validationMessage,
+      confidenceScore: extraction.confidenceScore,
       isDigitalScreen,
       isPhotoOfPhoto,
       isEdited,
-      fraudType,
-      confidenceScore: extraction.confidenceScore,
+      isTampered,
+      isExpired,
       nik: ktpData.nik || '',
       nama: ktpData.nama || '',
       namaLengkap: ktpData.nama || '',
@@ -90,6 +97,8 @@ export class OcrService {
       tanggalLahir: tanggalLahir,
       tempatTanggalLahir: tempatTanggalLahir,
       jenisKelamin: ktpData.jenisKelamin || '',
+      masaBerlaku: masaBerlaku,
+      berlakuHingga: masaBerlaku,
       ktpData: {
         nik: ktpData.nik || '',
         nama: ktpData.nama || '',
@@ -98,12 +107,15 @@ export class OcrService {
         tanggalLahir: tanggalLahir,
         tempatTanggalLahir: tempatTanggalLahir,
         jenisKelamin: ktpData.jenisKelamin || '',
-        documentType: extraction.detectedCardType,
+        documentType: docType,
+        cardType: docType,
+        masaBerlaku: masaBerlaku,
+        berlakuHingga: masaBerlaku,
         isDigitalScreen,
         isPhotoOfPhoto,
         isEdited,
-        fraudType,
-        masaBerlaku: ktpData.berlakuHingga || '',
+        isTampered,
+        isExpired,
       },
     };
   }
