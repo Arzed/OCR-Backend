@@ -4,8 +4,12 @@ import OpenAI from 'openai';
 
 export interface EKtpExtractionResponse {
   isValidKtp: boolean;
-  detectedCardType: 'E_KTP' | 'SIM' | 'CREDIT_CARD' | 'PASSPORT' | 'UNKNOWN';
+  detectedCardType: 'E_KTP' | 'SIM' | 'NPWP' | 'CREDIT_CARD' | 'PASSPORT' | 'UNKNOWN';
   validationMessage: string;
+  isDigitalScreen?: boolean;
+  isPhotoOfPhoto?: boolean;
+  isEdited?: boolean;
+  fraudType?: 'DIGITAL_SCREEN' | 'PHOTO_OF_PHOTO' | 'EDITED' | 'INVALID_CARD' | 'NONE';
   confidenceScore: number;
   ktpData?: {
     nik?: string;
@@ -39,12 +43,16 @@ export class OpenAiService {
 
   async extractAndValidateKtp(imageUrl: string): Promise<EKtpExtractionResponse> {
     const systemPrompt = `
-You are an expert AI document verification and OCR system specializing in Indonesian Identity Cards (E-KTP).
+You are an expert AI document verification, anti-spoofing fraud detection, and OCR system specializing in Indonesian Identity Cards (E-KTP).
 
 Your task:
-1. Verify if the provided image is a valid Indonesian E-KTP (Electronic KTP).
-2. Determine if the card is NOT an E-KTP (e.g. Driver's License / SIM, Credit Card, Passport, NPWP, Student ID, or arbitrary document).
-3. If it IS an E-KTP, extract all visible text fields with extreme precision into JSON format.
+1. Verify if the provided image is an authentic, physical Indonesian E-KTP (Electronic KTP).
+2. Detect if the document is NOT an E-KTP (e.g. SIM / Driver's License, NPWP, Credit Card, Passport, or arbitrary document).
+3. Anti-Spoofing & Fraud Detection:
+   - Check if the photo was captured from a DIGITAL SCREEN (monitor, laptop, or smartphone screen showing moiré patterns, bezel edges, or pixel grid). Set "isDigitalScreen": true if detected.
+   - Check if the photo is a PHOTO-OF-PHOTO / photocopy printout. Set "isPhotoOfPhoto": true if detected.
+   - Check if the card shows signs of DIGITAL EDITING / manipulation. Set "isEdited": true if detected.
+4. If it IS an authentic E-KTP, extract all visible text fields with extreme precision into JSON format.
 
 CRITICAL INSTRUCTIONS FOR MAXIMUM ACCURACY:
 - NIK: Must be EXACTLY 16 digits. Pay extreme attention to distinguishing numbers from letters (e.g. '0' vs 'O'/'D', '1' vs 'I'/'l', '8' vs 'B', '5' vs 'S', '3' vs 'E').
@@ -56,7 +64,11 @@ CRITICAL INSTRUCTIONS FOR MAXIMUM ACCURACY:
 Return ONLY valid JSON matching this schema:
 {
   "isValidKtp": boolean,
-  "detectedCardType": "E_KTP" | "SIM" | "CREDIT_CARD" | "PASSPORT" | "UNKNOWN",
+  "detectedCardType": "E_KTP" | "SIM" | "NPWP" | "CREDIT_CARD" | "PASSPORT" | "UNKNOWN",
+  "isDigitalScreen": boolean,
+  "isPhotoOfPhoto": boolean,
+  "isEdited": boolean,
+  "fraudType": "DIGITAL_SCREEN" | "PHOTO_OF_PHOTO" | "EDITED" | "INVALID_CARD" | "NONE",
   "validationMessage": "Clear explanation in Indonesian",
   "confidenceScore": number (0.0 to 1.0),
   "ktpData": {

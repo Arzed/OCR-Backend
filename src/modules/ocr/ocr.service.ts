@@ -68,12 +68,20 @@ export class OcrService {
     const tempatLahir = ktpData.tempatLahir || '';
     const tanggalLahir = ktpData.tanggalLahir || '';
     const tempatTanggalLahir = [tempatLahir, tanggalLahir].filter(Boolean).join(', ');
+    const isDigitalScreen = extraction.isDigitalScreen || false;
+    const isPhotoOfPhoto = extraction.isPhotoOfPhoto || false;
+    const isEdited = extraction.isEdited || false;
+    const fraudType = extraction.fraudType || (isDigitalScreen ? 'DIGITAL_SCREEN' : isEdited ? 'EDITED' : isPhotoOfPhoto ? 'PHOTO_OF_PHOTO' : 'NONE');
 
     return {
       id: recordId,
-      isValidKtp: extraction.isValidKtp,
+      isValidKtp: extraction.isValidKtp && !isDigitalScreen && !isPhotoOfPhoto && !isEdited,
       detectedCardType: extraction.detectedCardType,
       validationMessage: extraction.validationMessage,
+      isDigitalScreen,
+      isPhotoOfPhoto,
+      isEdited,
+      fraudType,
       confidenceScore: extraction.confidenceScore,
       nik: ktpData.nik || '',
       nama: ktpData.nama || '',
@@ -90,6 +98,12 @@ export class OcrService {
         tanggalLahir: tanggalLahir,
         tempatTanggalLahir: tempatTanggalLahir,
         jenisKelamin: ktpData.jenisKelamin || '',
+        documentType: extraction.detectedCardType,
+        isDigitalScreen,
+        isPhotoOfPhoto,
+        isEdited,
+        fraudType,
+        masaBerlaku: ktpData.berlakuHingga || '',
       },
     };
   }
