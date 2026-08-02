@@ -1,6 +1,6 @@
 /**
  * Upload APK to S3-compatible Object Storage (https://is3.cloudhost.id)
- * Bucket: zone-mart
+ * Bucket: ektp-verification
  * Object Key: daro-lab-mpos.apk
  *
  * Usage:
@@ -30,13 +30,14 @@ const BUCKET_NAME = process.env.S3_BUCKET || 'ektp-verification';
 const OBJECT_KEY = 'daro-lab-mpos.apk';
 
 const s3 = new S3Client({
-  region: 'ap-southeast-1', // required for AWS SDK compatibility
+  region: 'us-east-1',
   endpoint: process.env.S3_ENDPOINT || 'https://is3.cloudhost.id',
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID || 'WHBEHWV772ZO716LNBH2',
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'jGjt52f0AhTTL7tf9BXSBEMsWxB8RLRZD0tL8hsw',
   },
   forcePathStyle: true,
+  maxAttempts: 5,
 });
 
 async function uploadAPK() {
@@ -56,26 +57,43 @@ async function uploadAPK() {
   console.log(`📦 File Size       : ${fileSizeMB} MB`);
   console.log(`☁️ Target Storage   : s3://${BUCKET_NAME}/${OBJECT_KEY}`);
 
-  try {
-    const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: OBJECT_KEY,
-      Body: fileBuffer,
-      ContentType: 'application/vnd.android.package-archive',
-      ACL: 'public-read',
-    });
+  let attempts = 0;
+  const maxRetries = 3;
 
-    const result = await s3.send(command);
-    console.log('\n==================================================');
-    console.log('✅ UPLOAD BERHASIL!');
-    console.log(`📊 HTTP Status Code : ${result.$metadata.httpStatusCode}`);
-    console.log(`🔗 Public Download  : https://is3.cloudhost.id/${BUCKET_NAME}/${OBJECT_KEY}`);
-    console.log('==================================================\n');
-  } catch (err) {
-    console.error('\n❌ Upload Gagal:', err.message);
-    if (err.Code) console.error('Error Code:', err.Code);
-    if (err.$response) console.error('HTTP Status:', err.$response.statusCode);
-    process.exit(1);
+  while (attempts < maxRetries) {
+    attempts++;
+    try {
+      if (attempts > 1) {
+        console.log(`🔄 Attempt ${attempts} of ${maxRetries}... Retrying upload...`);
+      }
+
+      const command = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: OBJECT_KEY,
+        Body: fileBuffer,
+        ContentType: 'application/vnd.android.package-archive',
+        ACL: 'public-read',
+      });
+
+      const result = await s3.send(command);
+      console.log('\n==================================================');
+      console.log('✅ UPLOAD BERHASIL!');
+      console.log(`📊 HTTP Status Code : ${result.$metadata.httpStatusCode}`);
+      console.log(`🔗 Public Download  : https://is3.cloudhost.id/${BUCKET_NAME}/${OBJECT_KEY}`);
+      console.log('==================================================\n');
+      return;
+    } catch (err) {
+      console.error(`\n⚠️ Percobaan ${attempts} Gagal:`, err.message || err);
+      if (err.name) console.error('Error Type:', err.name);
+      if (err.Code) console.error('Error Code:', err.Code);
+      if (err.$response) console.error('HTTP Status:', err.$response.statusCode);
+
+      if (attempts >= maxRetries) {
+        console.error('\n❌ Upload Gagal setelah 3 kali percobaan.');
+        process.exit(1);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
   }
 }
 
